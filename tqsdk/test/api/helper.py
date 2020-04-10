@@ -119,7 +119,10 @@ class MockServer():
                 await self.stop_signal
 
     def _run(self):
-        self.script_file = lzma.open(self.script_file_name, "rt", encoding="utf-8")
+        if str.endswith(self.script_file_name, "lzma"):
+            self.script_file = lzma.open(self.script_file_name, "rt", encoding="utf-8")
+        else:  # 用于本地script还未压缩成lzma文件时运行测试用例
+            self.script_file = open(self.script_file_name, "rt", encoding="utf-8")
         asyncio.set_event_loop(self.loop)
         self.loop.run_until_complete(self._server())
 
@@ -129,9 +132,9 @@ class MockServer():
         for line in self.script_file:
             # 2019-09-09 16:22:40,652 - DEBUG - websocket message sent to wss://openmd.shinnytech.com/t/md/front/mobile: {"aid": "subscribe_quote",
             item = {}
-            if "websocket message sent" in line and "peek_message" not in line:
+            if "websocket message sent" in line and "peek_message" not in line:  # 在api角度的sent
                 item["type"] = "sent"
-            elif "websocket message received" in line:
+            elif "websocket message received" in line:  # 在api角度的received
                 item["type"] = "received"
             else:
                 continue

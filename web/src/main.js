@@ -58,7 +58,6 @@ Vue.filter('toFixed', function (value, decs) {
 GetTqsdkUrl().then(function(urlJson){
   let ins_url = urlJson['ins_url']
   let md_url = urlJson['md_url']
-  let ws_url = urlJson['ws_url']
   if (ins_url === 'https://openmd.shinnytech.com/t/md/symbols/latest.json') {
     let dt = moment().format('YYYY-MM-DD HH:mm:ss.SSSSSS')
     ins_url = `https://openmd.shinnytech.com/t/md/symbols/${dt}.json`
@@ -78,7 +77,7 @@ GetTqsdkUrl().then(function(urlJson){
   })
   Vue.prototype.$tqsdk = Vue.$tqsdk
   Vue.$tqsdk.initMdWebsocket()
-  let tqWs = Vue.$tqsdk.addWebSocket(ws_url)
+  let tqWs = Vue.$tqsdk.addWebSocket('ws://' + location.host + '/ws')
   tqWs.on('close', function(){
     store.commit('set_py_file_status', false)
   })

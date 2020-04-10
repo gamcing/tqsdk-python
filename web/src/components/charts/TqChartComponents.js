@@ -1,31 +1,10 @@
 import Vue from 'vue'
-
 import TqChart from 'tqchart'
 import 'tqchart/dist/tqchart.css'
 const CHART_ID = 'web_chart'
 const CHART_ID_FOCUS = 'web_chart_focus'
 let klines = null
 let chartInstance = null
-
-const RevertDtToId = function (dt) {
-  const [l, r] = [chartInstance.range.leftId, chartInstance.range.rightId]
-  if (!klines || !klines.data || !klines.data[l] || dt < klines.data[l].datetime) return null
-  // 可能整个图的right_id 大于 klines.last_id， 造成 klines.data[r].datetime 是 undefined
-  const rightId = klines.data[r] ? r : klines.last_id
-  if (dt <= klines.data[rightId].datetime) {
-    for (let i = l; i < rightId + 1; i++) {
-      if (dt - klines.data[i].datetime <= 0) return i
-    }
-  }
-  return null
-}
-
-const GetDatetimeRange = function () {
-  let [l, r] = [chartInstance.range.leftId, chartInstance.range.rightId]
-  r = klines.data[r] ? r : klines.last_id
-  if (!klines.data[l] || !klines.data[r]) return [-1, -1]
-  return [klines.data[l].datetime, klines.data[r].datetime]
-}
 
 export default {
   name: 'tq-chart-components',
@@ -105,7 +84,7 @@ export default {
     })
     chartInstance = new TqChart({
       id: this.id,
-      instrumentId: this.instrumentId,
+      symbol: this.instrumentId,
       duration: this.duration,
       height: this.height,
       width: this.width,
@@ -123,7 +102,7 @@ export default {
         self.$tqsdk.set_chart({
           chart_id: CHART_ID,
           symbol: self.instrumentId,
-          duration: self.duration,
+          duration: 60 * 1e9,
           trading_day_start: oneDay * ( 1 - n),
           trading_day_count: oneDay * n
         })
@@ -157,10 +136,7 @@ export default {
         // 得到某一个 trade, 定位到那里去
         let account_id = self.$store.state.account_id
         if (account_id) {
-          let trades = self.$tqsdk.get({
-            name: 'trades',
-            user_id: account_id
-          })
+          let trades = self.$tqsdk.getByPath(['trade', account_id, 'trades'])
           for(let trade_id in trades){
             let trade = trades[trade_id]
             if (chartInstance && chartInstance.symbol && chartInstance.duration) {
@@ -192,9 +168,15 @@ export default {
         })
       } else {
         let chart = self.$tqsdk.get_by_path(['charts', CHART_ID])
-        if (self.mainType === 'close' && chart && !chart.more_data && chart.left_id && chart.right_id) {
-          let [leftId, rightId] = [chart.left_id, chart.right_id]
-          chartInstance.setRange(leftId, rightId)
+        if (self.mainType === 'close' && chart && !chart.more_data) {
+          klines = self.$tqsdk.get({
+            name: 'klines',
+            symbol: self.instrumentId,
+            duration: 60 * 1e9
+          })
+          if (klines && klines.trading_day_end_id > -1 && klines.trading_day_start_id > -1) {
+            chartInstance.setRange(klines.trading_day_start_id, klines.trading_day_end_id)
+          }
         }
         if (chart && !chart.more_data && self.$tqsdk.is_changed(klines)) {
           chartInstance.draw()
@@ -228,7 +210,7 @@ export default {
       })
 
       if (chartInstance) {
-        let quote = this.$tqsdk.get_quote(this.instrumentId)
+        let quote = this.$tqsdk.getQuote(this.instrumentId)
         chartInstance.setMainSeries(this.instrumentId, this.duration, klines, this.mainType)
         chartInstance.price_decs = quote.price_decs
         this.$nextTick(function () {
@@ -240,7 +222,7 @@ export default {
     },
     updateTqSdkChartData () {
       let chartDatas = this.$tqsdk.get_by_path(['draw_chart_datas', chartInstance.symbol, chartInstance.duration])
-      if (chartDatas) {
+      if (chartDatas && chartDatas._epoch === this.$tqsdk.dm._epoch) {
         for (let seriesId in chartDatas) {
           chartInstance.addSeries(seriesId, chartDatas[seriesId])
         }
@@ -249,11 +231,7 @@ export default {
     updatePositionLine (snapshot) { // 持仓线
       let account_id = this.$store.state.account_id
       if (!account_id) return
-      let pos = this.$tqsdk.get({
-        name: 'position',
-        user_id: account_id,
-        symbol: chartInstance.symbol
-      })
+      let pos = this.$tqsdk.getByPath(['trade', account_id, 'positions', chartInstance.symbol])
       if (pos && pos.volume_long > 0) {
         chartInstance.addMark({
           id: 'pos_long',
@@ -290,17 +268,14 @@ export default {
     updateTrades (updateAll) { // 成交标记
       let account_id = this.$store.state.account_id
       if (!account_id) return
-      let trades =this.$tqsdk.get({
-        name: 'trades',
-        user_id: account_id
-      })
+      let trades =this.$tqsdk.getByPath(['trade', account_id, 'trades'])
       for(let trade_id in trades){
         let trade = trades[trade_id]
         if (updateAll) {
-          if (trade.volume > 0 && trade.symbol === chartInstance.symbol) {
+          if (trade.volume > 0 && (trade.exchange_id + '.' + trade.instrument_id) === chartInstance.symbol) {
             chartInstance.addTradeArrow(trade_id, trade)
           }
-        } else if (trade._epoch === this.$tqsdk.dm._epoch && trade.volume > 0 && trade.symbol === chartInstance.symbol) {
+        } else if (trade.volume > 0 && (trade.exchange_id + '.' + trade.instrument_id) === chartInstance.symbol) {
           chartInstance.addTradeArrow(trade_id, trade)
         }
       }
@@ -321,29 +296,3 @@ export default {
 
   }
 }
-
-  // {
-  //    aid: set_chart, # 请求图表数据
-  //    chart_id: string, # 图表id,服务器只会维护每个id收到的最后一个请求的数据
-  //    ins_list: string, 1024 max # 填空表示删除该图表，多个合约以逗号分割，第一个合约是主合约，所有id都是以主合约为准
-  //    duration: int # 周期，单位ns, tick:0, 日线: 3600 * 24 * 1000 * 1000 * 1000
-
-  //    # 下面有4种模式
-
-  //    # a: 请求最新N个数据，并保持滚动(新K线生成会移动图表)
-  //    view_width: int # 图表宽度
-
-  //    # b: 指定一个K线id，向右请求N个数据
-  //    view_width: int # 图表宽度
-  //    left_kline_id: int, # 屏幕最左端的K线id
-
-  //    # c: 使得指定日期的K线位于屏幕第M个柱子的位置
-  //    view_width: int # 图表宽度
-  //    focus_datetime: int # 日线及以上周期是交易日，其他周期是时间，UnixNano 北京时间
-  //    focus_position: int, # 指定K线位于屏幕的相对位置,0 表示位于最左端
-
-  //    # d: 指定交易日，返回对应的数据
-  //    trading_day_start: int # 大于0:交易日的UnixNano 北京时间 0:当前交易日 小于0:前N个交易日 eg: -3600 * 24 * 1000 * 1000 * 1000 表示上一个交易日
-  //    trading_day_count: int # 请求交易日天数 3600 * 24 * 1000 * 1000 * 1000 表示1天
-  //  }
-

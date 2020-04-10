@@ -1,23 +1,22 @@
 #!usr/bin/env python3
 #-*- coding:utf-8 -*-
-"""
-@author: yanqiong
-@file: guihelper.py
-@create_on: 2019/11/7
-@description: 
-"""
-import os
-import re
-import sys
-import argparse
-import simplejson
+__author__ = 'yanqiong'
+
 import asyncio
-from datetime import datetime
-from aiohttp import web
-from urllib.parse import urlparse
+import os
 import socket
-import websockets
-import tqsdk
+import sys
+from datetime import datetime
+from urllib.parse import urlparse
+
+import simplejson
+from aiohttp import web
+
+import tqsdk.api
+import tqsdk.sim
+import tqsdk.backtest
+from tqsdk.datetime import _get_trading_day_start_time
+
 
 class TqWebHelper(object):
 
@@ -25,36 +24,32 @@ class TqWebHelper(object):
         """初始化，检查参数"""
         self._api = api
         self._logger = self._api._logger.getChild("TqWebHelper")  # 调试信息输出
-        if isinstance(self._api._web_gui, str):
-            host, _, port = urlparse(self._api._web_gui).netloc.partition(":")
-            self._http_server_host = host if host else "127.0.0.1"
+        ip, port = TqWebHelper.parse_url(self._api._web_gui)
+        self._http_server_host = ip if ip else "0.0.0.0"
+        self._http_server_port = int(port) if port else 0
+
+        args = TqWebHelper.parser_env_arguments()
+        if args["_action"] == "run":
+            # 运行模式下，账户参数冲突需要抛错，提示用户
+            if isinstance(self._api._account, tqsdk.api.TqAccount) and \
+                    (self._api._account._account_id != args["_account_id"] or self._api._account._broker_id != args["_broker_id"]):
+                raise Exception("策略代码与插件设置中的账户参数冲突。可尝试删去代码中的账户参数 TqAccount，以终端或者插件设置的账户参数运行。")
+            self._api._account = tqsdk.api.TqAccount(args["_broker_id"], args["_account_id"], args["_password"])
+            self._api._backtest = None
+            self._logger.info("正在使用账户 {bid}, {aid} 运行策略。".format(bid=args["_broker_id"], aid=args["_account_id"]))
+        elif args["_action"] == "backtest":
+            self._api._account = tqsdk.sim.TqSim(args["_init_balance"])
+            self._api._backtest = tqsdk.backtest.TqBacktest(start_dt=datetime.strptime(args["_start_dt"], '%Y%m%d'),
+                                        end_dt=datetime.strptime(args["_end_dt"], '%Y%m%d'))
+            self._logger.info("当前回测区间 {sdt} - {edt}。".format(sdt=args["_start_dt"], edt=args["_end_dt"]))
+        elif args["_action"] == "replay":
+            self._api._backtest = tqsdk.backtest.TqReplay(datetime.strptime(args["_replay_dt"], '%Y%m%d'))
+            self._logger.info("当前复盘日期 {rdt}。".format(rdt=args["_replay_dt"]))
+        if args["_http_server_address"]:
+            self._api._web_gui = True  # 命令行 _http_server_address, 一定打开 _web_gui
+            ip, port = TqWebHelper.parse_url(args["_http_server_address"])
+            self._http_server_host = ip if ip else "0.0.0.0"
             self._http_server_port = int(port) if port else 0
-        else:
-            self._http_server_host = "127.0.0.1"
-            self._http_server_port = 0
-
-        args = TqWebHelper.parser_arguments()
-        if args:
-            if args["_action"] == "run":
-                # 运行模式下，账户参数冲突需要抛错，提示用户
-                if isinstance(self._api._account, tqsdk.api.TqAccount) and \
-                        (self._api._account._account_id != args["_account_id"] or self._api._account._broker_id != args["_broker_id"]):
-                    raise Exception("策略代码与设置中的账户参数冲突。可尝试删去代码中的账户参数 TqAccount，以终端或者插件设置的账户参数运行。")
-                self._api._account = tqsdk.api.TqAccount(args["_broker_id"], args["_account_id"], args["_password"])
-                self._api._backtest = None
-            elif args["_action"] == "backtest":
-                self._api._account = tqsdk.api.TqSim(args["_init_balance"])
-                self._api._backtest = tqsdk.api.TqBacktest(start_dt=datetime.strptime(args["_start_dt"], '%Y%m%d'),
-                                            end_dt=datetime.strptime(args["_end_dt"], '%Y%m%d'))
-            elif args["_action"] == "replay":
-                self._api._backtest = tqsdk.api.TqReplay(datetime.strptime(args["_replay_dt"], '%Y%m%d'))
-
-            if args["_http_server_address"]:
-                self._api._web_gui = True  # 命令行 _http_server_address, 一定打开 _web_gui
-                address = urlparse(args["_http_server_address"])
-                host, _, port = address.netloc.partition(":")
-                self._http_server_host = host if host else "127.0.0.1"
-                self._http_server_port = int(port) if port else 0
 
     async def _run(self, api_send_chan, api_recv_chan, web_send_chan, web_recv_chan):
         if not self._api._web_gui:
@@ -68,6 +63,7 @@ class TqWebHelper(object):
                         await web_send_chan.send(pack)
             finally:
                 _data_handler_without_web_task.cancel()
+                await asyncio.gather(_data_handler_without_web_task, return_exceptions=True)
         else:
             self._web_dir = os.path.join(os.path.dirname(__file__), 'web')
             file_path = os.path.abspath(sys.argv[0])
@@ -75,9 +71,9 @@ class TqWebHelper(object):
             # 初始化数据截面
             self._data = {
                 "action": {
-                    "mode": "replay" if isinstance(self._api._backtest, tqsdk.api.TqReplay) else "backtest" if isinstance(self._api._backtest, tqsdk.api.TqBacktest) else "run",
+                    "mode": "replay" if isinstance(self._api._backtest, tqsdk.backtest.TqReplay) else "backtest" if isinstance(self._api._backtest, tqsdk.backtest.TqBacktest) else "run",
                     "md_url_status": '-',
-                    "td_url_status": True if isinstance(self._api._account, tqsdk.api.TqSim) else '-',
+                    "td_url_status": True if isinstance(self._api._account, tqsdk.sim.TqSim) else '-',
                     "account_id": self._api._account._account_id,
                     "broker_id": self._api._account._broker_id if isinstance(self._api._account, tqsdk.api.TqAccount) else 'TQSIM',
                     "file_path": file_path[0].upper() + file_path[1:],
@@ -91,9 +87,7 @@ class TqWebHelper(object):
             self._order_symbols = set()
             self._diffs = []
             self._conn_diff_chans = set()
-            self.web_port_chan = tqsdk.api.TqChan(self._api)  # 记录到 ws port 的channel
             _data_task = self._api.create_task(self._data_handler(api_recv_chan, web_recv_chan))
-            _wsserver_task = self._api.create_task(self.link_wsserver())
             _httpserver_task = self._api.create_task(self.link_httpserver())
 
             try:
@@ -132,8 +126,8 @@ class TqWebHelper(object):
                         await web_send_chan.send(pack)
             finally:
                 _data_task.cancel()
-                _wsserver_task.cancel()
                 _httpserver_task.cancel()
+                await asyncio.gather(_data_task, _httpserver_task, return_exceptions=True)
 
     async def _data_handler_without_web(self, api_recv_chan, web_recv_chan):
         # 没有 web_gui, 接受全部数据转发给下游 api_recv_chan
@@ -229,7 +223,7 @@ class TqWebHelper(object):
             tqsim_current_timestamp = self._api._account._get_current_timestamp()
             if tqsim_current_timestamp == 631123200000000000:
                 # 未收到任何行情, TqSim 时间没有更新
-                return tqsdk.TqApi._get_trading_day_start_time(self._data['_tqsdk_replay']['replay_dt'])
+                return _get_trading_day_start_time(self._data['_tqsdk_replay']['replay_dt'])
             else:
                 return tqsim_current_timestamp
         else:
@@ -279,115 +273,98 @@ class TqWebHelper(object):
             else:
                 result[key] = diff[key]
 
-    async def link_wsserver(self):
-        async def lambda_connection_handler(conn, path): await self.connection_handler(conn)
-        async with websockets.serve(lambda_connection_handler, host=self._http_server_host, port=0) as server:
-            port = server.server.sockets[0].getsockname()[1]
-            await self.web_port_chan.send({'port': port})
-            await asyncio.sleep(100000000000)
-
     def get_send_msg(self, data=None):
         return simplejson.dumps({
             'aid': 'rtn_data',
             'data': [self._data if data is None else data]
         }, ignore_nan=True)
 
-    async def connection_handler(self, conn):
+    async def connection_handler(self, request):
+        ws = web.WebSocketResponse()
+        await ws.prepare(request)
         send_msg = self.get_send_msg(self._data)
-        await conn.send(send_msg)
+        await ws.send_str(send_msg)
         conn_chan = tqsdk.api.TqChan(self._api, last_only=True)
         self._conn_diff_chans.add(conn_chan)
         try:
-            async for msg in conn:
-                pack = simplejson.loads(msg)
+            async for msg in ws:
+                pack = simplejson.loads(msg.data)
                 if pack["aid"] == 'peek_message':
                     last_diff = await conn_chan.recv()
                     send_msg = self.get_send_msg(last_diff)
-                    await conn.send(send_msg)
+                    await ws.send_str(send_msg)
         except Exception as e:
             await conn_chan.close()
             self._conn_diff_chans.remove(conn_chan)
 
     async def link_httpserver(self):
+        try:
+            url_response = {
+                "ins_url": self._api._ins_url,
+                "md_url": self._api._md_url,
+            }
+            # TODO：在复盘模式下发送 replay_dt 给 web 端，服务器改完后可以去掉
+            if isinstance(self._api._backtest, tqsdk.backtest.TqReplay):
+                url_response["replay_dt"] = int(datetime.combine(self._api._backtest._replay_dt, datetime.min.time()).timestamp() * 1e9)
+            app = web.Application()
+            app.router.add_get(path='/url', handler=lambda request: TqWebHelper.httpserver_url_handler(url_response))
+            app.router.add_get(path='/', handler=self.httpserver_index_handler)
+            app.router.add_get(path='/index.html', handler=self.httpserver_index_handler)
+            app.router.add_static('/web', self._web_dir, show_index=True)
+            app.add_routes([web.get('/ws', self.connection_handler)])
+            runner = web.AppRunner(app)
+            await runner.setup()
+            server_socket = socket.socket()
+            server_socket.bind((self._http_server_host, self._http_server_port))
+            address = server_socket.getsockname()
+            site = web.SockSite(runner, server_socket)
+            await site.start()
+            ip = "127.0.0.1" if address[0] == "0.0.0.0" else address[0]
+            self._logger.info("您可以访问 http://{ip}:{port} 查看策略绘制出的 K 线图形。".format(ip=ip, port=address[1]))
+            await asyncio.sleep(100000000000)
+        finally:
+            await runner.shutdown()
+            await runner.cleanup()
 
-        ws_port = await self.web_port_chan.recv()
-        # init http server handlers
-        url_response = {
-            "ins_url": self._api._ins_url,
-            "md_url": self._api._md_url,
-            "ws_url": 'ws://%s:%s' % (self._http_server_host, str(ws_port['port']))
-        }
-        # TODO：在复盘模式下发送 replay_dt 给 web 端，服务器改完后可以去掉
-        if isinstance(self._api._backtest, tqsdk.api.TqReplay):
-            url_response["replay_dt"] = int(datetime.combine(self._api._backtest._replay_dt, datetime.min.time()).timestamp() * 1e9)
+    def httpserver_index_handler(self, request):
+        return web.FileResponse(self._web_dir + '/index.html')
 
-        app = web.Application()
-        app.router.add_get(path='/url',
-                           handler=lambda request: TqWebHelper.httpserver_url_handler(url_response))
-        app.router.add_get(path='/', handler=lambda request: TqWebHelper.httpserver_index_handler(self._web_dir))
-        app.router.add_static('/', self._web_dir, show_index=True)
-        runner = web.AppRunner(app)
-        await runner.setup()
-        server_socket = socket.socket()
-        server_socket.bind((self._http_server_host, self._http_server_port))
-        address = server_socket.getsockname()
-        site = web.SockSite(runner, server_socket)
-        await site.start()
-        self._logger.info("您可以访问 http://{ip}:{port} 查看策略绘制出的 K 线图形。".format(ip=address[0], port=address[1]))
-        await asyncio.sleep(100000000000)
+    @staticmethod
+    def parse_url(url):
+        if isinstance(url, str):
+            parse_result = urlparse(url, scheme='')
+            addr = parse_result.netloc if parse_result.scheme == "http" else url
+            return addr.split(':')
+        else:
+            return '0.0.0.0', '0'
 
     @staticmethod
     def httpserver_url_handler(response):
         return web.json_response(response)
 
     @staticmethod
-    def httpserver_index_handler(web_dir):
-        return web.FileResponse(path=web_dir + '/index.html')
-
-    @staticmethod
-    def parser_arguments():
-        """解析命令行参数"""
-        parser = argparse.ArgumentParser()
-        # 天勤连接基本参数
-        parser.add_argument('--_action', type=str, required=False)
-        # action==run
-        parser.add_argument('--_broker_id', type=str, required=False)
-        parser.add_argument('--_account_id', type=str, required=False)
-        parser.add_argument('--_password', type=str, required=False)
-        # action==backtest
-        parser.add_argument('--_start_dt', type=str, required=False)
-        parser.add_argument('--_end_dt', type=str, required=False)
-        parser.add_argument('--_init_balance', type=str, required=False)
-        # action==replay
-        parser.add_argument('--_replay_dt', type=str, required=False)
-        # others
-        parser.add_argument('--_http_server_address', type=str, required=False)
-        args, unknown = parser.parse_known_args()
-        action = {}
-        action["_action"] = args._action
+    def parser_env_arguments():
+        action = {
+            "_action": os.getenv("TQ_ACTION"),
+            "_http_server_address": os.getenv("TQ_HTTP_SERVER_ADDRESS")
+        }
         if action["_action"] == "run":
-            if not args._broker_id or not args._account_id or not args._password:
-                raise Exception("run 必要参数缺失")
-            else:
-                action["_broker_id"] = args._broker_id
-                action["_account_id"] = args._account_id
-                action["_password"] = args._password
+            action["_broker_id"] = os.getenv("TQ_BROKER_ID")
+            action["_account_id"] = os.getenv("TQ_ACCOUNT_ID")
+            action["_password"] = os.getenv("TQ_PASSWORD")
+            if not action["_broker_id"] or not action["_account_id"] or not action["_password"]:
+                action["_action"] = None
         elif action["_action"] == "backtest":
-            if not args._start_dt or not args._end_dt:
-                raise Exception("backtest 必要参数缺失")
-            else:
-                try:
-                    init_balance = 10000000.0 if args._init_balance is None else float(args._init_balance)
-                    action["_start_dt"] = args._start_dt
-                    action["_end_dt"] = args._end_dt
-                    action["_init_balance"] = init_balance
-                except ValueError:
-                    raise Exception("backtest 参数错误, _init_balance = " + args._init_balance + " 不是数字")
+            action["_start_dt"] = os.getenv("TQ_START_DT")
+            action["_end_dt"] = os.getenv("TQ_END_DT")
+            try:
+                action["_init_balance"] = 10000000.0 if os.getenv("TQ_INIT_BALANCE") is None else float(os.getenv("TQ_INIT_BALANCE"))
+            except ValueError:
+                action["_init_balance"] = 10000000.0
+            if not action["_start_dt"] or not action["_end_dt"]:
+                action["_action"] = None
         elif action["_action"] == "replay":
-            if not args._replay_dt:
-                raise Exception("replay 必要参数缺失")
-            else:
-                action["_replay_dt"] = args._replay_dt
-
-        action["_http_server_address"] = args._http_server_address
+            action["_replay_dt"] = os.getenv("TQ_REPLAY_DT")
+            if not action["_replay_dt"]:
+                action["_action"] = None
         return action

@@ -15,32 +15,34 @@
 """
 __author__ = 'chengzhi'
 
-import re
-import json
-import ssl
-import uuid
-import sys
-import time
-import logging
+import asyncio
+import base64
 import copy
 import ctypes
-import asyncio
 import functools
-import certifi
-import websockets
-import requests
-import random
-import base64
+import json
+import logging
 import os
+import random
+import re
+import ssl
+import sys
+import time
+import uuid
 from datetime import datetime
 from typing import Union, List, Any, Optional
-import pandas as pd
+
+import certifi
 import numpy as np
-from .__version__ import __version__
-from tqsdk.sim import TqSim
-from tqsdk.objs import Entity, Quote, Kline, Tick, Account, Position, Order, Trade
+import pandas as pd
+import requests
+import websockets
+
 from tqsdk.backtest import TqBacktest, TqReplay
+from tqsdk.objs import Entity, Quote, Kline, Tick, Account, Position, Order, Trade
+from tqsdk.sim import TqSim
 from tqsdk.tqwebhelper import TqWebHelper
+from .__version__ import __version__
 
 
 class TqApi(object):
@@ -53,9 +55,6 @@ class TqApi(object):
     """
 
     RD = random.Random()  # 初始化随机数引擎
-    DEFAULT_INS_URL = "https://openmd.shinnytech.com/t/md/symbols/latest.json"
-    DEFAULT_MD_URL = "wss://openmd.shinnytech.com/t/md/front/mobile"
-    DEFAULT_TD_URL = "wss://opentd.shinnytech.com/trade/user0"
 
     def __init__(self, account: Union['TqAccount', TqSim, None] = None, auth: Optional[str] = None, url: Optional[str] = None,
                  backtest: Union[TqBacktest, TqReplay, None] = None, web_gui: [bool, str] = False, debug: Optional[str] = None,
@@ -95,7 +94,9 @@ class TqApi(object):
 
             loop(asyncio.AbstractEventLoop): [可选]使用指定的 IOLoop, 默认创建一个新的.
 
-            web_gui(bool/str): [可选]是否启用 图形化界面 功能, 默认不启用. 启用图形化界面传入参数web_gui = True会每次以随机端口生成网页，也可以直接设置本机IP端口为网页地址参考example 6
+            web_gui(bool/str): [可选]是否启用图形化界面功能, 默认不启用.
+                * 启用图形化界面传入参数 web_gui=True 会每次以随机端口生成网页，也可以直接设置本机IP和端口 web_gui=[ip]:port 为网页地址，
+                ip 可选，默认为 0.0.0.0，参考example 6
                 * 为了图形化界面能够接收到程序传输的数据并且刷新，在程序中，需要循环调用 api.wait_update的形式去更新和获取数据
                 * 推荐打开图形化界面的浏览器为Google Chrome 或 Firefox
 
@@ -135,7 +136,7 @@ class TqApi(object):
 
             # 开启 web_gui 功能，使用本机IP端口固定网址生成
             from tqsdk import TqApi
-            api = TqApi(web_gui="http://127.0.0.1:9876")
+            api = TqApi(web_gui=":9876")  # 等价于 api = TqApi(web_gui="0.0.0.0:9876")
 
         """
 
@@ -159,21 +160,20 @@ class TqApi(object):
         # 记录参数
         self._account = TqSim() if account is None else account
         self._backtest = backtest
-        self._ins_url = TqApi.DEFAULT_INS_URL
-        self._md_url = TqApi.DEFAULT_MD_URL
-        self._td_url = TqApi.DEFAULT_TD_URL
 
         # 支持用户授权
-        self._access_token = ''
+        self._access_token = 'eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJobi1MZ3ZwbWlFTTJHZHAtRmlScjV5MUF5MnZrQmpLSFFyQVlnQ0UwR1JjIn0.eyJqdGkiOiIwY2UwOTM2Ny0xYjk2LTQ0NTktOGU2My1hYWM1ZTA3Mjc1ZTIiLCJleHAiOjE2MTU1Mzk1MTQsIm5iZiI6MCwiaWF0IjoxNTg0MDAzNTE0LCJpc3MiOiJodHRwczovL2F1dGguc2hpbm55dGVjaC5jb20vYXV0aC9yZWFsbXMvc2hpbm55dGVjaCIsInN1YiI6IjYzMzJhZmUwLWU5OWQtNDc1OC04MjIzLWY5OTBiN2RmOGY4NSIsInR5cCI6IkJlYXJlciIsImF6cCI6InNoaW5ueV90cSIsImF1dGhfdGltZSI6MCwic2Vzc2lvbl9zdGF0ZSI6IjUzYTEyYmNkLTc3M2EtNDcyZC1iZWVlLWZlMmQ1ODAzYjU0YyIsImFjciI6IjEiLCJzY29wZSI6ImF0dHJpYnV0ZXMiLCJncmFudHMiOnsiZmVhdHVyZXMiOlsiY21iIiwiYWR2Il0sImFjY291bnRzIjpbIioiXX19.BmqzmorwITPd2YLP9EbhlIxkTDNTAY-PNPfM9LwOkOc5XJlSK34nHZwW14mmIScYiohhN5iaVtPrPNsohFfPcH-FxhFmmr9M_xIJLDf4zw2ObcZwVGTQFnIExjdpj2ej82bPT0yoBBFoOH3NhFuK0agifE0WOp0lXf2kzQsQncZ-y9djCEuwbuZapNmdVhGsWWGt7gMd9ZJNrmViZifSWkOrpiowIQ4fOPp1L2DJju8QldwHtyPnYTZtN56x14Xd7v-4-VB3vWEoHB99r36bjhlXJsxuiZrQom0esahgtV_7gx_G95bN04XevriRXG9JzOSoHhpYQFKqjZlSQ4L7vw'
         if auth:
             comma_index = auth.find(',')
             email, pwd = auth[:comma_index], auth[comma_index + 1:]
-            headers = {}
-            headers.update(self._base_headers)
-            headers.update({"Content-Type": "application/x-www-form-urlencoded"})
+            headers = {
+                "User-Agent": "tqsdk-python %s" % __version__,
+                "Accept": "application/json",
+                "Content-Type": "application/x-www-form-urlencoded"
+            }
             response = requests.post("https://auth.shinnytech.com/auth/realms/shinnytech/protocol/openid-connect/token",
                                      headers=headers,
-                                     data="grant_type=password&username=%s&password=%s&client_id=tqsdk&client_secret=bdf198ea-6ecb-4ba1-80fd-1a41453f16f1" % (email, pwd),
+                                     data="grant_type=password&username=%s&password=%s&client_id=shinny_tq&client_secret=be30b9f4-6862-488a-99ad-21bde0400081" % (email, pwd),
                                      timeout=30)
             if response.status_code == 200:
                 self._access_token = json.loads(response.content)["access_token"]
@@ -181,21 +181,13 @@ class TqApi(object):
             else:
                 self._logger.warning("用户权限认证失败 (%d,%s)" % (response.status_code, response.content))
 
+        self._ins_url = os.getenv("TQ_INS_URL", "https://openmd.shinnytech.com/t/md/symbols/latest.json")
+        self._md_url = os.getenv("TQ_MD_URL", "wss://openmd.shinnytech.com/t/md/front/mobile")
+        self._td_url = os.getenv("TQ_TD_URL", None)
         if url and isinstance(self._account, TqSim):
             self._md_url = url
-        if isinstance(self._account, TqAccount):
-            if url:
-                self._td_url = url
-            else:
-                # 支持分散部署的交易中继网关
-                response = requests.get("https://files.shinnytech.com/broker-list.json", headers=self._base_headers,
-                                        timeout=30)
-                broker_list = json.loads(response.content)
-                if self._account._broker_id not in broker_list:
-                    raise Exception("不支持该期货公司-%s，请联系期货公司。" % (self._account._broker_id))
-                if "TQ" not in broker_list[self._account._broker_id]["category"]:
-                    raise Exception("不支持该期货公司-%s，请联系期货公司。" % (self._account._broker_id))
-                self._td_url = broker_list[self._account._broker_id]["url"]
+        if url and isinstance(self._account, TqAccount):
+            self._td_url = url
         if _ins_url:
             self._ins_url = _ins_url
         if _md_url:
@@ -1207,6 +1199,17 @@ class TqApi(object):
             self.create_task(
                 self._account._run(self, self._send_chan, self._recv_chan, ws_md_send_chan, ws_md_recv_chan))
         else:
+            # _td_url 如果还是默认地址，即用户没有特别指定，换成期货公司交易地址，否则不做处理
+            if self._td_url is None:
+                # 交易中继网关
+                response = requests.get("https://files.shinnytech.com/broker-list.json", headers=self._base_headers,
+                                        timeout=30)
+                broker_list = json.loads(response.content)
+                if self._account._broker_id not in broker_list:
+                    raise Exception("不支持该期货公司-%s，请联系期货公司。" % self._account._broker_id)
+                if "TQ" not in broker_list[self._account._broker_id]["category"]:
+                    raise Exception("不支持该期货公司-%s，请联系期货公司。" % self._account._broker_id)
+                self._td_url = broker_list[self._account._broker_id]["url"]
             ws_td_send_chan, ws_td_recv_chan = TqChan(self), TqChan(self)
             self.create_task(self._connect(self._td_url, ws_td_send_chan, ws_td_recv_chan))
             self.create_task(
@@ -1794,10 +1797,9 @@ class TqApi(object):
     def _base_headers(self):
         headers = {
             "User-Agent": "tqsdk-python %s" % __version__,
-            "Accept": "application/json"
+            "Accept": "application/json",
+            "Authorization": "Bearer %s" % self._access_token
         }
-        if self._access_token:
-            headers["Authorization"] = "Bearer %s" % self._access_token
         return headers
 
     @staticmethod
@@ -1932,33 +1934,6 @@ class TqApi(object):
     def _generate_order_id():
         """生成order id"""
         return uuid.UUID(int=TqApi.RD.getrandbits(128)).hex
-
-    @staticmethod
-    def _get_trading_day_start_time(trading_day):
-        """给定交易日, 获得交易日起始时间"""
-        begin_mark = 631123200000000000  # 1990-01-01
-        start_time = trading_day - 21600000000000  # 6小时
-        week_day = (start_time - begin_mark) // 86400000000000 % 7
-        if week_day >= 5:
-            start_time -= 86400000000000 * (week_day - 4)
-        return start_time
-
-    @staticmethod
-    def _get_trading_day_end_time(trading_day):
-        """给定交易日, 获得交易日结束时间"""
-        return trading_day + 64799999999999  # 18小时
-
-    @staticmethod
-    def _get_trading_day_from_timestamp(timestamp):
-        """给定时间, 获得其所属的交易日"""
-        begin_mark = 631123200000000000  # 1990-01-01
-        days = (timestamp - begin_mark) // 86400000000000  # 自 1990-01-01 以来的天数
-        if (timestamp - begin_mark) % 86400000000000 >= 64800000000000:  # 大于18点, 天数+1
-            days += 1
-        week_day = days % 7
-        if week_day >= 5:  # 如果是周末则移到星期一
-            days += 7 - week_day
-        return begin_mark + days * 86400000000000
 
     @staticmethod
     def _deep_copy_dict(source, dest):
@@ -2359,3 +2334,6 @@ class TqChan(asyncio.Queue):
 
     async def __aexit__(self, exc_type, exc, tb):
         await self.close()
+
+
+print("在使用天勤量化之前，默认您已经知晓并同意以下免责条款，如果不同意请立即停止使用：https://www.shinnytech.com/blog/disclaimer/", file=sys.stderr)

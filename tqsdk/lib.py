@@ -2,9 +2,12 @@
 #  -*- coding: utf-8 -*-
 __author__ = 'chengzhi'
 
-from tqsdk.api import TqChan, TqApi
+import time
 from asyncio import gather
 from typing import Optional
+
+from tqsdk.api import TqChan, TqApi
+from tqsdk.sim import TqSim
 
 
 class TargetPosTaskSingleton(type):
@@ -12,11 +15,15 @@ class TargetPosTaskSingleton(type):
 
     def __call__(cls, api, symbol, price="ACTIVE", offset_priority="今昨,开", trade_chan=None, *args, **kwargs):
         if symbol not in TargetPosTaskSingleton._instances:
-            TargetPosTaskSingleton._instances[symbol] = super(TargetPosTaskSingleton, cls).__call__(api, symbol, price, offset_priority, trade_chan, *args, **kwargs)
+            TargetPosTaskSingleton._instances[symbol] = super(TargetPosTaskSingleton, cls).__call__(api, symbol, price,
+                                                                                                    offset_priority,
+                                                                                                    trade_chan, *args,
+                                                                                                    **kwargs)
         else:
             instance = TargetPosTaskSingleton._instances[symbol]
             if instance._offset_priority != offset_priority:
-                raise Exception("您试图用不同的 offset_priority 参数创建两个 %s 调仓任务, offset_priority参数原为 %s, 现为 %s" % (symbol, instance._offset_priority, offset_priority))
+                raise Exception("您试图用不同的 offset_priority 参数创建两个 %s 调仓任务, offset_priority参数原为 %s, 现为 %s" % (
+                    symbol, instance._offset_priority, offset_priority))
             if instance._price != price:
                 raise Exception("您试图用不同的 price 参数创建两个 %s 调仓任务, price参数原为 %s, 现为 %s" % (symbol, instance._price, price))
         return TargetPosTaskSingleton._instances[symbol]
@@ -30,7 +37,10 @@ class TargetPosTask(object, metaclass=TargetPosTaskSingleton):
         """
         创建目标持仓task实例，负责调整归属于该task的持仓 **(默认为整个账户的该合约净持仓)**.
 
-        **注意:** TargetPosTask 在 set_target_volume 时并不下单或撤单, 它的下单和撤单动作, 是在之后的每次 wait_update 时执行的. 因此, **需保证 set_target_volume 后还会继续调用wait_update()**
+        **注意:**
+            1. TargetPosTask 在 set_target_volume 时并不下单或撤单, 它的下单和撤单动作, 是在之后的每次 wait_update 时执行的. 因此, **需保证 set_target_volume 后还会继续调用wait_update()** 。
+
+            2. 请勿在使用 TargetPosTask 的同时使用 insert_order() 函数, 否则将导致 TargetPosTask 报错或错误下单。
 
         Args:
             api (TqApi): TqApi实例，该task依托于指定api下单/撤单
@@ -69,6 +79,11 @@ class TargetPosTask(object, metaclass=TargetPosTaskSingleton):
         self._pos_chan = TqChan(self._api, last_only=True)
         self._trade_chan = trade_chan if trade_chan is not None else TqChan(self._api)
         self._task = self._api.create_task(self._target_pos_task())
+
+        self._quote = self._api.get_quote(self._symbol)
+        self._time_update_task = self._api.create_task(self._update_time_from_md())  # 监听行情更新并记录当时本地时间的task
+        self._local_time_record = time.time() - 0.005  # 更新最新行情时间时的本地时间
+        self._local_time_record_update_chan = TqChan(self._api, last_only=True)  # 监听 self._local_time_record 更新
 
     def set_target_volume(self, volume: int) -> None:
         """
@@ -143,10 +158,26 @@ class TargetPosTask(object, metaclass=TargetPosTaskSingleton):
             order_volume = 0
         return order_offset, order_dir, order_volume
 
+    async def _update_time_from_md(self):
+        """监听行情更新并记录当时本地时间的task"""
+        async with self._api.register_update_notify(self._quote) as quote_update_chan:
+            async for _ in quote_update_chan:  # quote有更新时:更新记录的时间
+                self._local_time_record = time.time() - 0.005  # 更新最新行情时间时的本地时间
+                self._local_time_record_update_chan.send_nowait(True)  # 通知记录的时间有更新
+
     async def _target_pos_task(self):
         """负责调整目标持仓的task"""
         try:
             async for target_pos in self._pos_chan:
+                # lib 中对于时间判断的方案:
+                #   如果当前时间（模拟交易所时间）不在交易时间段内，则：等待直到行情更新
+                #   行情更新（即下一交易时段开始）后：获取target_pos最新的目标仓位, 开始调整仓位
+
+                # 如果不在可交易时间段内: 等待更新
+                while not TqSim._is_in_trading_time(self._quote, self._quote["datetime"], self._local_time_record):
+                    await self._local_time_record_update_chan.recv()
+
+                target_pos = self._pos_chan.recv_latest(target_pos)  # 获取最后一个target_pos目标仓位
                 # 确定调仓增减方向
                 delta_volume = target_pos - self._pos.pos
                 pending_forzen = 0
@@ -173,7 +204,8 @@ class TargetPosTask(object, metaclass=TargetPosTaskSingleton):
 
 
 class InsertOrderUntilAllTradedTask(object):
-    """追价下单task, 该task会在行情变化后自动撤单重下，直到全部成交"""
+    """追价下单task, 该task会在行情变化后自动撤单重下，直到全部成交
+     （注：此类主要在tqsdk内部使用，并非简单用法，不建议用户使用）"""
 
     def __init__(self, api, symbol, direction, offset, volume, price="ACTIVE", trade_chan=None):
         """
@@ -267,7 +299,7 @@ class InsertOrderUntilAllTradedTask(object):
 
 
 class InsertOrderTask(object):
-    """下单task"""
+    """下单task （注：此类主要在tqsdk内部使用，并非简单用法，不建议用户使用）"""
 
     def __init__(self, api, symbol, direction, offset, volume, limit_price=None, order_chan=None, trade_chan=None):
         """
