@@ -3,7 +3,7 @@
 交易辅助工具
 ====================================================
 
-:py:class:`~tqsdk.lib.TargetPosTask` 是按照目标持仓手数自动调整 账户持仓中某合约的净持仓 的工具, 使用示例如下::
+:py:class:`~tqsdk.TargetPosTask` 是按照目标持仓手数自动调整 账户持仓中某合约的净持仓 的工具, 使用示例如下::
 
     target_pos = TargetPosTask(api, "SHFE.rb1901")      #创建一个自动调仓工具, 负责调整SHFE.rb1901的持仓
     target_pos.set_target_volume(5)                     #要求自动调仓工具将持仓调整到5手
@@ -11,9 +11,9 @@
 
 下面是一个更实际的价差交易例子::
 
-    from tqsdk import TqApi, TargetPosTask
+    from tqsdk import TqApi, TqAuth, TargetPosTask
 
-    api = TqApi()
+    api = TqApi(auth=TqAuth("快期账户", "账户密码"))
     # 创建 rb1810 的目标持仓 task，该 task 负责调整 rb1810 的仓位到指定的目标仓位
     target_pos_near = TargetPosTask(api, "SHFE.rb1810")
     # 创建 rb1901 的目标持仓 task，该 task 负责调整 rb1901 的仓位到指定的目标仓位
@@ -40,9 +40,9 @@
 * 1. TargetPosTask 在 set_target_volume 时并不下单或撤单, 它的下单和撤单动作, 是在之后的每次 wait_update 时执行的. 因此, **需保证 set_target_volume 后还会继续调用wait_update()**
 * 2. 为每个合约只创建一个 TargetPosTask 实例. 一旦创建好后, 可以调用任意多次 set_target_volume 函数, **它总是以最后一次 set_target_volume 设定的手数为工作目标。** 如::
 
-        from tqsdk import TqApi, TargetPosTask
+        from tqsdk import TqApi, TqAuth, TargetPosTask
 
-        api = TqApi()
+        api = TqApi(auth=TqAuth("快期账户", "账户密码"))
         target_pos = TargetPosTask(api, "SHFE.rb2001")
         # 设定目标净持仓为空头1手
         target_pos.set_target_volume(-1)
@@ -67,10 +67,8 @@
     对于上期所和上海能源交易中心合约, 平仓时则直接根据今/昨的手数进行下单. 对于非上期所和能源交易中心: "今仓"和"昨仓" 是服务器按照今/昨仓的定义(本交易日开始时的持仓手数为昨仓, 之后下单的都为今仓)来计算的, 在平仓时, 则根据计算的今昨仓手数进行下单.
 
     如持有大商所某合约并且 offset_priority 为"今开", 而本交易日未下单(在今昨仓的概念上这是"昨仓", 则不进行平仓, 直接用开仓操作来调整净持仓以达到目标.
-* 5. 请勿试图在程序运行中销毁 TargetPosTask 实例.
+* 5. 如需要取消当前 TargetPosTask 任务，请参考  :ref:`targetpostask2` 。
 * 6. 请勿在使用 TargetPosTask 的同时使用 insert_order() 函数, 否则将导致 TargetPosTask 报错或错误下单。
 
 
-
-:py:class:`~tqsdk.lib.InsertOrderUntilAllTradedTask` 是追价下单task, 该task会在行情变化后自动撤单重下，直到全部成交.
 

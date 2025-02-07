@@ -8,8 +8,8 @@
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 TqSdk可以在windows/linux或macosx环境下运行. 无论您选择使用windows或linux系统, 请确保
 
-* 已经装有 Python 3.6+
-* 安装 :ref:`TqSdk <install>`
+* 已经装有 Python 3.7+
+* 安装 :ref:`TqSdk <tqsdk_install>`
 
 创建一个目录, 放置你所有的策略文件. 
 
@@ -18,7 +18,7 @@ TqSdk可以在windows/linux或macosx环境下运行. 无论您选择使用window
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 将每个策略程序配置为独立直连实盘账号. 在创建 TqApi 时, 传入TqAccount实例. 注意期货公司名称需要与天勤中的名称一致::
 
-  api = TqApi(TqAccount("H海通期货", "022631", "123456"))
+  api = TqApi(TqAccount("H海通期货", "022631", "123456"), auth=TqAuth("快期账户", "账户密码"))
 
 
 检查策略程序
@@ -32,22 +32,26 @@ TqSdk可以在windows/linux或macosx环境下运行. 无论您选择使用window
 
 在 windows 环境下配置策略的定时启动/停止
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-在 windows 下, 通常使用计划任务来管理策略的定时启动/停止, 下面的说明以 Windows Server 2008 为例, 其它 windows 版本操作可能有少许差异.
+在 windows 下, 通常使用计划任务来管理策略的定时启动/停止, 下面的说明以 Windows 10 为例, 其它 windows 版本操作可能有少许差异.
 
 
 打开 windows 任务计划管理器
 
-.. image:: ../images/win2008_start_scheduled_task.png
+.. image:: ../images/win10_start_scheduled_task.png
+
+点击 创建基本任务
+
+.. image:: ../images/win10_start_scheduled_task_create.png
 
 
 为每个策略添加一个策略启动任务, [程序或脚本]处填 python.exe, [添加参数]处填策略代码py文件名和参数, [起始于]处填策略代码目录
 
-.. image:: ../images/win2008_scheduled_task_python.png
+.. image:: ../images/win10_start_scheduled_task_python.png
 
 
 最后添加一个任务, 用来停止所有策略进程. [程序或脚本]处填 taskkill, [添加参数]处填 /IM python.exe
 
-.. image:: ../images/win2008_scheduled_task_kill.png
+.. image:: ../images/win10_start_scheduled_task_taskkill.png
 
 
 在 linux 环境下配置策略的定时启动/停止
@@ -63,7 +67,7 @@ TqSdk可以在windows/linux或macosx环境下运行. 无论您选择使用window
 
   from tqsdk import TqApi, TqAccount
 
-  api = TqApi(TqAccount("H海通期货", "0330203", "123456"))
+  api = TqApi(TqAccount("H海通期货", "0330203", "123456"), auth=TqAuth("快期账户", "账户密码"))
   # 开仓两手并等待完成
   order = api.insert_order(symbol="SHFE.rb1901", direction="BUY", offset="OPEN", limit_price=4310,volume=2)
   while order.status != "FINISHED":
@@ -87,7 +91,7 @@ TqSdk可以在windows/linux或macosx环境下运行. 无论您选择使用window
   args = parser.parse_args()
   print("策略参数为: ", args.user_name, args.symbol)
 
-  api = TqApi(TqAccount(args.broker, args.user_name, args.password))
+  api = TqApi(TqAccount(args.broker, args.user_name, args.password), auth=TqAuth("快期账户", "账户密码"))
   # 开仓两手并等待完成
   order = api.insert_order(symbol=args.symbol, direction="BUY", offset="OPEN", limit_price=4310,volume=2)
   while order.status != "FINISHED":

@@ -13,10 +13,10 @@ ATR的计算比较简单，首先我们要算出当前真实的波幅.这里不�
 在天勤中我们可以很方便的计算出以上两个数据::
 
     # 获取 SHFE.au1912 合约的平均真实波幅，导入TqApi和对应的技术指标函数ATR
-    from tqsdk import TqApi 
+    from tqsdk import TqApi, TqAuth
     from tqsdk.ta import ATR
 
-    api = TqApi()
+    api = TqApi(TqAuth("快期账户", "账户密码"))
     klines = api.get_kline_serial("SHFE.au1912", 24 * 60 * 60)
     atr = ATR(klines, 14)
     print(atr.tr)  # 真实波幅

@@ -7,9 +7,13 @@
 .. toctree::
     :maxdepth: 2
 
+    order.rst
     backtest.rst
     multi_strategy.rst
     gui.rst
+    dingding.rst
     for_vnpy_user.rst
     for_ctp_user.rst
     unanttended.rst
+    targetpostask2.rst
+    scheduler.rst

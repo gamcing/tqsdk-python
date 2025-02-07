@@ -2,34 +2,65 @@
 
 账户与交易
 ====================================================
+快期账户和实盘账户
+----------------------------------------------------
+在使用 TqSdk 之前，用户需要先注册自己的 **快期账户** ，传入快期账户是使用任何 TqSdk 程序的前提
+
+点击  `注册快期账户 <https://account.shinnytech.com/>`_ ::
+
+    from tqsdk import TqApi, TqAuth
+    api = TqApi(auth=TqAuth("快期账户", "账户密码"))
+
+对于 TqSdk 免费版，每个快期账户支持最多绑定一个实盘账户，并且快期账户会在用户第一次使用实盘账户时自动进行绑定(自动绑定功能需要 TqSdk 版本> 1.8.3)::
+
+    from tqsdk import TqApi, TqAuth
+    api = TqApi(auth=TqAuth("快期账户", "账户密码"))
+
+
+如果需要注册快期账户或者修改您的快期账户绑定的实盘账户，请点击 `登录用户管理中心 <https://www.shinnytech.com/register-intro/>`_ ，登录成功后显示如下
+
+在下方红框处,用户可以自行解绑/绑定实盘账户，其中解绑操作每天限定一次
+
+.. figure:: ../images/user_web_management.png
+
+如果需要让您的快期账户支持更多的实盘账户，可以购买或申请试用我们的 `天勤量化专业版 <https://www.shinnytech.com/tqsdk-buy/>`_
 
 设定实盘交易账户
 ----------------------------------------------------
-TqSdk 要求在创建 TqApi 时指定交易账户。一旦TqApi创建成功，后续所有通过TqApi发出的交易指令均在此账户中进行. 
+TqSdk 要求在创建 TqApi 时指定交易账户。一旦TqApi创建成功，后续所有通过TqApi发出的交易指令均在此账户中进行.
 
-要使用实盘交易账户, 请使用 :py:class:`~tqsdk.api.TqAccount` (注：使用前请先 import TqAccount) . ::
+要使用实盘交易账户, 请使用 :py:class:`~tqsdk.TqAccount` (注：使用前请先 import TqAccount)::
 
-    api = TqApi(TqAccount("H海通期货", "320102", "123456"))
+    from tqsdk import TqAccount, TqApi, TqAuth
 
-:py:class:`~tqsdk.api.TqAccount` 的三个参数分别为 期货公司名, 用户名和密码. 目前TqSdk支持的期货公司列表请参见 :ref:`broker_list`
+    api = TqApi(TqAccount("H海通期货", "320102", "123456"), auth=TqAuth("快期账户", "账户密码"))
 
-如果您在期货公司的账户位于期货公司的其它席位上(非主席), 您可以在创建 TqAccount 时用 front_broker 和 front_url 参数指定次席服务器::
-
-    api = TqApi(TqAccount("H海通期货", "320102", "123456", front_broker="3233", front_url="tcp://132.31.128.201:41205"))
+:py:class:`~tqsdk.TqAccount` 的三个参数分别为 <期货公司名>, <用户名> 和 <密码> (期货公司名前需加大写首字母). 目前TqSdk支持的期货公司列表请参见: `TqSdk支持的期货公司列表 <https://www.shinnytech.com/blog/tq-support-broker/>`_
 
 TqApi 创建成功即代表相应账户已登录成功. 如果在60秒内无法完成登录, 会抛出超时异常, 用户代码可以此判定登录失败::
 
     try:
-        api = TqApi(TqAccount("H海通期货", "320102", "123456"))
+        api = TqApi(TqAccount("H海通期货", "320102", "123456"), auth=TqAuth("快期账户", "账户密码"))
     except Exception as e:
         print("行情服务连不上, 或者期货公司服务器关了, 或者账号密码错了, 总之就是有问题")
 
 
+设定快期模拟交易账户
+----------------------------------------------------
+如果您需要使用快期模拟账户进行测试，只需在创建TqApi时传入一个 :py:class:`~tqsdk.TqKq` 的实例，同时需要传入快期账户 :ref:`sim_trading`。
+
+此账户类型与快期 APP 、天勤官网论坛、快期专业版使用相同的模拟账户系统::
+
+    from tqsdk import TqApi, TqAuth, TqKq
+
+    api = TqApi(TqKq(), auth=TqAuth("快期账户", "账户密码"))
+
+
 设定模拟交易账户
 ----------------------------------------------------
-如果您需要使用模拟账户进行测试，只需在创建TqApi时传入一个 :py:class:`~tqsdk.sim.TqSim` 的实例（不填写参数则默认为 TqSim() 模拟账号）::
+如果您需要使用模拟账户进行测试，只需在创建TqApi时传入一个 :py:class:`~tqsdk.TqSim` 的实例（不填写参数则默认为 TqSim() 模拟账号）::
 
-    api = TqApi(TqSim())
+    api = TqApi(TqSim()，auth=TqAuth("快期账户", "账户密码"))
 
 
 如果需要使用能保存账户资金及持仓信息的模拟账户，请使用 "快期模拟" 账号, 账户申请及使用方法请参考 :ref:`sim_trading` 部分内容。
@@ -39,16 +70,16 @@ TqApi 创建成功即代表相应账户已登录成功. 如果在60秒内无法�
 ----------------------------------------------------
 TqApi 提供以下函数来获取交易账户相关信息:
 
-* :py:meth:`~tqsdk.api.TqApi.get_account` - 获取账户资金情况
-* :py:meth:`~tqsdk.api.TqApi.get_position` - 获取持仓情况
-* :py:meth:`~tqsdk.api.TqApi.get_order` - 获取委托单
+* :py:meth:`~tqsdk.TqApi.get_account` - 获取账户资金情况
+* :py:meth:`~tqsdk.TqApi.get_position` - 获取持仓情况
+* :py:meth:`~tqsdk.TqApi.get_order` - 获取委托单
 
 以上函数返回的都是dict, 并会在 wait_update 时更新
 
 
 交易指令
 ----------------------------------------------------
-要在交易账户中发出一个委托单, 使用 :py:meth:`~tqsdk.api.TqApi.insert_order` 函数::
+要在交易账户中发出一个委托单, 使用 :py:meth:`~tqsdk.TqApi.insert_order` 函数::
 
     order = api.insert_order(symbol="SHFE.rb1901", direction="BUY", offset="OPEN", limit_price=4310, volume=2)
     print(order)
@@ -80,11 +111,11 @@ TqApi 提供以下函数来获取交易账户相关信息:
         api.wait_update()
         print("委托单状态: %s, 未成交手数: %d 手" % (order.status, order.volume_left))
 
-要撤销一个委托单, 使用 :py:meth:`~tqsdk.api.TqApi.cancel_order` 函数::
+要撤销一个委托单, 使用 :py:meth:`~tqsdk.TqApi.cancel_order` 函数::
 
     api.cancel_order(order)
 
-* **除 insert_order 和 cancel_order 外, TqSdk 提供了一些更强的交易辅助工具比如** :py:class:`~tqsdk.lib.TargetPosTask`. **使用这些工具, 可以简化交易逻辑的编码工作.**
+* **除 insert_order 和 cancel_order 外, TqSdk 提供了一些更强的交易辅助工具比如** :py:class:`~tqsdk.TargetPosTask`. **使用这些工具, 可以简化交易逻辑的编码工作.**
 
 .. _broker_list:
 

@@ -1,10 +1,11 @@
 <p align="center">
-  <img src ="https://raw.githubusercontent.com/shinnytech/tqsdk-python/master/doc/logo.png"/>
+  <img src ="https://raw.githubusercontent.com/shinnytech/tqsdk-python/master/doc/images/tqsdk_new_logo.png"/>
 </p>
 <p align="center">
-    <img src ="https://img.shields.io/badge/version-1.6.3-blueviolet.svg"/>
+    <img src ="https://img.shields.io/pypi/v/tqsdk?color=blueviolet">
     <img src ="https://img.shields.io/badge/platform-windows|linux|macos-green.svg"/>
-    <img src ="https://img.shields.io/badge/python-3.6+-blue.svg" />
+    <img src ="https://img.shields.io/badge/python-3.7+-blue.svg" />
+    <img src ="https://img.shields.io/pypi/dm/tqsdk?color=yellowgreen">
     <img src ="https://img.shields.io/github/license/shinnytech/tqsdk-python.svg?color=orange"/>
 </p>
 
@@ -12,12 +13,12 @@ TqSdk 天勤量化交易策略程序开发包
 ====================================
 TqSdk 是一个由[信易科技](https://www.shinnytech.com)发起并贡献主要代码的开源 python 库. 
 依托[快期多年积累成熟的交易及行情服务器体系](https://www.shinnytech.com/diff), TqSdk 支持用户使用极少的代码量构建各种类型的量化交易策略程序, 
-并提供包含 历史数据-实时数据-开发调试-策略回测-模拟交易-实盘交易-运行监控-风险管理 的全套解决方案.
+并提供包含期货、期权、股票的 历史数据-实时数据-开发调试-策略回测-模拟交易-实盘交易-运行监控-风险管理 全套解决方案.
 
 ``` {.sourceCode .python}
-from tqsdk import TqApi, TqAccount, TargetPosTask
+from tqsdk import TqApi, TqAuth, TqAccount, TargetPosTask
 
-api = TqApi(TqAccount("H海通期货", "4003242", "123456"))      # 创建 TqApi 实例, 指定交易账户
+api = TqApi(TqAccount("H海通期货", "4003242", "123456"), auth=TqAuth("快期账户", "账户密码"))      # 创建 TqApi 实例, 指定交易账户
 q_1910 = api.get_quote("SHFE.rb1910")                         # 订阅近月合约行情
 t_1910 = TargetPosTask(api, "SHFE.rb1910")                    # 创建近月合约调仓工具
 q_2001 = api.get_quote("SHFE.rb2001")                         # 订阅远月合约行情
@@ -66,7 +67,7 @@ TqSdk 提供的功能可以支持从简单到复杂的各类策略程序.
 
 Installation
 -------------------------------------------------
-TqSdk 仅支持 Python 3.6 及更高版本. 要安装 TqSdk, 可使用 pip:
+TqSdk 仅支持 Python 3.7 及更高版本. 要安装 TqSdk, 可使用 pip:
 
 ``` {.sourceCode .bash}
 $ pip install tqsdk
@@ -77,11 +78,11 @@ Documentation
 -------------------------------------------------
 在线阅读HTML版本文档: https://doc.shinnytech.com/tqsdk/latest
 
-在线问答社区: https://www.shinnytech.com/qa
-
 知乎账户【天勤量化】：https://www.zhihu.com/org/tian-qin-liang-hua/activities
 
-用户交流QQ群: **619870862** (目前只允许给我们点过STAR的同学加入, 加群时请提供github用户名)
+天勤AI助手：https://udify.app/chat/im02prcHNEOVbPAx  解释函数，编写demo策略，分析报错原因，它都可以做到！
+
+用户交流QQ群: **611806823** (目前只允许给我们点过STAR的同学加入, 加群时请提供github用户名)
 
 	
 Gui

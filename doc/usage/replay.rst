@@ -22,12 +22,12 @@
 因为复盘提供对应合约全部的当日历史行情数据，对后端服务器会有较大压力，目前只支持复盘模式下选择单日进行复盘
 
 
-使用 TqSdk 编写的策略程序，不需要修改策略代码，只需要在创建 api 实例时给 backtest 参数传入 :py:class:`~tqsdk.backtest.TqReplay` 指定复盘日期, 策略就会进入复盘模式:: 
+使用 TqSdk 编写的策略程序，不需要修改策略代码，只需要在创建 api 实例时给 backtest 参数传入 :py:class:`~tqsdk.backtest.TqReplay` 指定复盘日期, 策略就会进入复盘模式::
 
   from datetime import date
   from tqsdk import TqApi, TqReplay
 
-  api = TqApi(backtest = TqReplay(date(2019,12,23)))
+  api = TqApi(backtest = TqReplay(date(2019,12,23)), auth=TqAuth("快期账户", "账户密码"))
 
 
 此外我们认为复盘模式结合图形化界面会有更好的体验，可以参考 :ref:`web_gui` 

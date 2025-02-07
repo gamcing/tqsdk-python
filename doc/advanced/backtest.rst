@@ -8,7 +8,7 @@
 -------------------------------------------------
 TqSdk 并不提供专门的参数优化机制. 您可以按照自己的需求, 针对可能的每个参数值安排一个回测, 观察它们的回测结果, 以简单的双均线策略为例::
 
-  from tqsdk import TqApi, TqSim, TargetPosTask, BacktestFinished, TqBacktest
+  from tqsdk import TqApi, TqAuth, TqSim, TargetPosTask, BacktestFinished, TqBacktest
   from tqsdk.tafunc import ma
   from datetime import date
 
@@ -18,7 +18,7 @@ TqSdk 并不提供专门的参数优化机制. 您可以按照自己的需求, �
   for SHORT in range(20, 40): # 短周期参数从20-40分别做回测
     acc = TqSim()             # 每次回测都创建一个新的模拟账户
     try:
-      api = TqApi(acc, backtest=TqBacktest(start_dt=date(2019, 5, 6), end_dt=date(2019, 5, 10)))
+      api = TqApi(acc, backtest=TqBacktest(start_dt=date(2019, 5, 6), end_dt=date(2019, 5, 10)), auth=TqAuth("快期账户", "账户密码"))
       account = api.get_account()
       klines = api.get_kline_serial(SYMBOL, duration_seconds=60, data_length=LONG + 2)
       target_pos = TargetPosTask(api, SYMBOL)
@@ -40,7 +40,7 @@ TqSdk 并不提供专门的参数优化机制. 您可以按照自己的需求, �
 -------------------------------------------------
 如果您有大量回测任务想要尽快完成, 您首先需要一台给力的电脑(可以考虑到XX云上租一台32核的, 一小时几块钱). 然后您就可以并发执行N个回测了. 还是以上面的策略为例::
 
-  from tqsdk import TqApi, TqSim, TargetPosTask, BacktestFinished, TqBacktest
+  from tqsdk import TqApi, TqAuth, TqSim, TargetPosTask, BacktestFinished, TqBacktest
   from tqsdk.tafunc import ma
   from datetime import date
   import multiprocessing
@@ -51,7 +51,7 @@ TqSdk 并不提供专门的参数优化机制. 您可以按照自己的需求, �
     SYMBOL = "SHFE.cu1907"
     acc = TqSim()
     try:
-      api = TqApi(acc, backtest=TqBacktest(start_dt=date(2019, 5, 6), end_dt=date(2019, 5, 10)))
+      api = TqApi(acc, backtest=TqBacktest(start_dt=date(2019, 5, 6), end_dt=date(2019, 5, 10)), auth=TqAuth("快期账户", "账户密码"))
       data_length = LONG + 2
       klines = api.get_kline_serial(SYMBOL, duration_seconds=60, data_length=data_length)
       target_pos = TargetPosTask(api, SYMBOL)

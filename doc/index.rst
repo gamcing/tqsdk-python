@@ -1,7 +1,8 @@
 .. image:: logo.png
-   :width: 400 px
+   :width: 600 px
    :align: center
 
+|
 
 .. _pysdk:
 
@@ -19,8 +20,10 @@ TianQin Python Sdk User Guide
     demo/index.rst
     reference/index.rst
     advanced/index.rst
-    devtools/index.rst
     dev/index.rst
+    profession.rst
+    enterprise.rst
+    tqsdk_llm.rst
     qa.rst
     version.rst
 

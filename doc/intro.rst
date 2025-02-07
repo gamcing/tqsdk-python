@@ -8,9 +8,9 @@ TqSdk 是一个由 `信易科技 <https://www.shinnytech.com>`_ 发起并贡献�
 依托 `快期多年积累成熟的交易及行情服务器体系 <https://www.shinnytech.com/diff>`_ , TqSdk 支持用户使用很少的代码量构建各种类型的量化交易策略程序, 
 并提供包含 历史数据-实时数据-开发调试-策略回测-模拟交易-实盘交易-运行监控-风险管理 的全套解决方案::
 
-  from tqsdk import TqApi, TqAccount, TargetPosTask
+  from tqsdk import TqApi, TqAuth, TqAccount, TargetPosTask
 
-  api = TqApi(TqAccount("H海通期货", "4003242", "123456"))      # 创建 TqApi 实例, 指定交易账户
+  api = TqApi(TqAccount("H海通期货", "4003242", "123456"), auth=TqAuth("快期账户", "账户密码"))      # 创建 TqApi 实例, 指定交易账户
   q_1910 = api.get_quote("SHFE.rb1910")                         # 订阅近月合约行情
   t_1910 = TargetPosTask(api, "SHFE.rb1910")                    # 创建近月合约调仓工具
   q_2001 = api.get_quote("SHFE.rb2001")                         # 订阅远月合约行情

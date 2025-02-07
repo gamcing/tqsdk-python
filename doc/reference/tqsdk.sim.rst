@@ -1,7 +1,16 @@
 .. _tqsdk.sim:
 
-tqsdk.sim - 模拟交易
+tqsdk.TqSim - 本地模拟交易
 ------------------------------------------------------------------
-.. automodule:: tqsdk.sim
+.. autoclass:: tqsdk.TqSim
     :members:
+    :inherited-members:
 
+
+.. _tqsdk.sim_stock:
+
+tqsdk.TqSimStock - 本地股票模拟交易
+------------------------------------------------------------------
+.. autoclass:: tqsdk.TqSimStock
+    :members:
+    :inherited-members:
